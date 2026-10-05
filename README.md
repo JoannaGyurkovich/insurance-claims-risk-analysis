@@ -1,12 +1,12 @@
 # Motor Insurance Claims — Risk Analysis (freMTPL2)
 
-> **Status: work in progress.** SQL stage complete; Python modelling and Power BI dashboard in progress.
+> **Status: work in progress.** SQL stage and Power BI dashboard complete; Python modelling in progress.
 
 ## Overview
 
 Analysis of ~678,000 French motor third-party liability policies to find out which customer segments drive claim frequency, claim severity and expected claim cost (pure premium).
 
-End-to-end pipeline: **Python** (data acquisition) → **SQL Server** (data quality, cleaning, segment analysis) → **Python** (modelling, planned) → **Power BI** (dashboard, planned).
+End-to-end pipeline: **Python** (data acquisition) → **SQL Server** (data quality, cleaning, segment analysis) → **Power BI** (dashboard) → **Python** (modelling, planned).
 
 ## Business questions
 
@@ -18,7 +18,7 @@ End-to-end pipeline: **Python** (data acquisition) → **SQL Server** (data qual
 
 - **Python 3** (pandas, scikit-learn): data acquisition and merging
 - **Microsoft SQL Server / T-SQL**: data quality checks, cleaning, analysis (CTEs, window functions, conditional aggregation, views)
-- **Power BI**: dashboard (in progress)
+- **Power BI / DAX**: interactive dashboard (measures with `CALCULATE`, `ALLSELECTED`, `DIVIDE`)
 
 ## Data
 
@@ -52,7 +52,8 @@ All amounts are in EUR.
 │   ├── 03_segment_analysis.sql
 │   └── 04_vw_policy_bi.sql
 └── powerbi/
-    └── (dashboard, in progress)
+    ├── insurance_claims_dashboard.pbix
+    └── dashboard.png
 ```
 
 ## How to reproduce
@@ -82,7 +83,13 @@ The raw table (`fremtpl2_full`) is kept untouched; all corrections are applied i
 | Float precision | `Exposure` stored as e.g. 0.100000001490116 | Converted to `DECIMAL` |
 | Large claims | 42 policies with total claim cost above €100k; the largest €4.08M | Kept and flagged (`flag_duza_szkoda`); results shown with and without them |
 
-**Deviation from the common reference approach:** capping of `ClaimNb` and `Exposure` follows scikit-learn's [Tweedie regression example](https://scikit-learn.org/stable/auto_examples/linear_model/plot_tweedie_regression_insurance_claims.html) on this dataset. That example also sets `ClaimNb` to 0 for claims without an amount. This project does not, because those claims make up over a quarter of all claims, removing them would understate claim frequency by roughly 25%.
+**Deviation from the common reference approach:** capping of `ClaimNb` and `Exposure` follows scikit-learn's [Tweedie regression example](https://scikit-learn.org/stable/auto_examples/linear_model/plot_tweedie_regression_insurance_claims.html) on this dataset. That example also sets `ClaimNb` to 0 for claims without an amount. This project does not, because those claims make up over a quarter of all claims; removing them would understate claim frequency by roughly 25%.
+
+## Power BI dashboard
+
+![Dashboard](powerbi/dashboard.png)
+
+One-page dashboard built on `vw_policy_bi` (Import mode). All measures are kept in a dedicated `_Miary` table: claim frequency, average severity with and without large claims, pure premium and share of claims (`CALCULATE` + `ALLSELECTED`). Slicers for fuel type, bonus-malus group and region; all visuals cross-filter each other. Before building the visuals, the DAX measures were reconciled with the SQL results.
 
 ## Findings so far
 
@@ -123,6 +130,23 @@ The raw table (`fremtpl2_full`) is kept untouched; all corrections are applied i
 
 Across all segments analysed so far, differences in average severity largely disappear once the 42 largest claims are excluded; the only remaining notable gap is for drivers aged 18–24 (about 13%). **Differences in risk between segments are driven mainly by claim frequency, not by claim size**, while severity is dominated by a small number of very large claims.
 
+### Bonus-malus
+
+| Bonus-malus | Claim frequency |
+|---|---|
+| 50 (maximum discount) | 0.080 |
+| 51–99 (partial discount) | 0.121 |
+| 100 (base level, no history) | 0.276 |
+| above 100 (surcharge) | 0.376 |
+
+- Drivers with a surcharge have **4.7× higher claim frequency** than drivers with the maximum discount: past claims are a strong predictor of future claims.
+- Drivers at the base level (100), mostly new drivers without a claims history, have 3.4× higher frequency than those with the maximum discount. This overlaps with the driver-age effect above.
+
+### Region
+
+- Claim frequency differs between regions almost twofold: from **0.140 in R94** to **0.075 in R41** (1.9×).
+- Regions differ a lot in size, so results for small regions may partly reflect random variation.
+
 ### Bonus-malus profile of the portfolio
 
 | Bonus-malus | Policies | Share |
@@ -141,10 +165,8 @@ Across all segments analysed so far, differences in average severity largely dis
 ## Next steps
 
 - Multivariate model of claim frequency in Python (e.g. Poisson GLM)
-- Power BI dashboard built on `vw_policy_bi`, with DAX measures
-- Segment analysis for bonus-malus, vehicle characteristics and region
+- Segment analysis for vehicle characteristics (age, power, brand)
 
 ## Author
 
-Joanna Gyurkovich
-email: asia.gyurkovich@gmail.com
+Joanna Gyurkovich · [asia.gyurkovich@gmail.com](mailto:asia.gyurkovich@gmail.com)
